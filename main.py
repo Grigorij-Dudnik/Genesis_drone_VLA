@@ -3,58 +3,27 @@ import time
 import math
 import numpy as np
 import genesis as gs
+import random
 from buildings_scene import scene
 from drone_setup import drone, drone_lidar, camera_front, camera_bottom, front_camera_mount
+from autoflight_policy import autoflight_policy
 from init_dataset import dataset
+from real_policy import PolicyInference
 
-#scene.viewer.follow_entity(drone)
 
-timestamp = time.strftime("%Y%m%d-%H%M%S")
-scene.start_recording(
-    data_func=lambda: camera_front.read().rgb,
-    rec_options=gs.recorders.VideoFile(
-        filename=os.path.expanduser(f'~/Gregs_tech/Drone_sim/drone_flight_{timestamp}.mp4'),
-        hz=50,
-    )
-)
+INFERENCE = True
 
+scene.viewer.follow_entity(drone)
+
+# timestamp = time.strftime("%Y%m%d-%H%M%S")
+# scene.start_recording(
+#     data_func=lambda: camera_front.read().rgb,
+#     rec_options=gs.recorders.VideoFile(
+#         filename=os.path.expanduser(f'~/Gregs_tech/Drone_sim/drone_flight_{timestamp}.mp4'),
+#         hz=50,
+#     )
+# )
 scene.build()
-
-scene.sim.rigid_solver.add_weld_constraint(
-    drone.links[0].idx,
-    front_camera_mount.links[0].idx
-)
-
-
-def autoflight_policy(sensor_data):   
-    helipad_distance_x, helipad_distance_y, helipad_distance_z, yaw_diff = sensor_data
-    move_x = (helipad_distance_x) * 0.3
-    move_y = (helipad_distance_y) * 0.3
-    move_x = np.clip(move_x, -1, 1)
-    move_y = np.clip(move_y, -1, 1)
-    move_z = 0
-    move_yaw = np.clip(yaw_diff * 5, -1, 1)
-
-    ray_distances = drone_lidar.read().distances
-
-    # Indices 0, 1, 2 are the front corridor (-5°, 0°, 5°)
-    front_obstacle_distance = ray_distances[0:3, 0].min().item()
-    left_obstacle_distance = ray_distances[3, 0].item()
-    right_obstacle_distance = ray_distances[4, 0].item()
-
-    if move_x < 0.1 and move_y < 0.1:
-        move_z = (helipad_distance_z) * 0.3
-        move_z = np.clip(move_z, -1, 1)
-    elif front_obstacle_distance < 3.0:
-        move_y = 0.5 * -math.copysign(1, move_y)
-    elif right_obstacle_distance < 0.9:
-        move_y = -2 * right_obstacle_distance * (1 - 0.9 / right_obstacle_distance)
-        move_y = np.clip(move_y, -1, 1)
-    elif left_obstacle_distance < 0.9:
-        move_y = 2 * left_obstacle_distance * (1 - 0.9 / left_obstacle_distance)
-        move_y = np.clip(move_y, -1, 1)
-
-    return np.array([move_x, move_y, move_z, move_yaw], dtype=np.float32)
 
 
 def get_sensor_data(helipad_pos=(12, 0, 0.4)):
@@ -68,19 +37,38 @@ def get_sensor_data(helipad_pos=(12, 0, 0.4)):
     helipad_distance_y = helipad_pos[1] - pos[1].item()
     helipad_distance_z = helipad_pos[2] - pos[2].item()
 
-    return np.array([helipad_distance_x, helipad_distance_y, helipad_distance_z, yaw_diff], dtype=np.float32)
+    ray_distances = drone_lidar.read().distances
+    front_obstacle_distance = ray_distances[0:3, 0].min().item()
+    left_obstacle_distance = ray_distances[3, 0].item()
+    right_obstacle_distance = ray_distances[4, 0].item()
+
+    return np.array([helipad_distance_x, helipad_distance_y, helipad_distance_z, yaw_diff, front_obstacle_distance], dtype=np.float32), right_obstacle_distance, left_obstacle_distance
 
 
-while True:
-    try:
-        front_frame_np = (camera_front.read().rgb.clamp(0.0, 1.0) * 255.0).byte().cpu().numpy()
-        bottom_frame_np = (camera_bottom.read().rgb.clamp(0.0, 1.0) * 255.0).byte().cpu().numpy()
-        obs_state = get_sensor_data()
+def check_contact(helipad_dx, helipad_dy, helipad_dz):
+    if abs(helipad_dx) < 0.5 and abs(helipad_dy) < 0.5 and abs(helipad_dz) < 0.02:
+        return True
+    return False
 
-        action = autoflight_policy(obs_state)
+nr_episodes = 50
+for _ in range(nr_episodes):
+    
+    scene.sim.rigid_solver.add_weld_constraint(
+        drone.links[0].idx,
+        front_camera_mount.links[0].idx
+    )
+
+    while not INFERENCE:
+        front_frame_np = camera_front.read().rgb.cpu().numpy()
+        bottom_frame_np = camera_bottom.read().rgb.cpu().numpy()
+        obs_state, r_obstacle_d, l_obstacle_d = get_sensor_data()
+        helipad_dx, helipad_dy, helipad_dz, yaw_diff, f_obstacle_d = obs_state
+
+        action = autoflight_policy(obs_state, r_obstacle_d, l_obstacle_d)
+        move_x, move_y, move_z, yaw = action
         print(f"Action: move_x={action[0]:.2f}, move_y={action[1]:.2f}, move_z={action[2]:.2f}, yaw={action[3]:.2f}")
-        target_velocity = np.array([action[0] * 5, action[1] * 5, action[2] * 5, 0, 0, action[3]])
-        drone.set_propellels_rpm([10000, 10000, 10000, 10000])
+        target_velocity = np.array([move_x * 5, move_y * 5, move_z * 5, 0, 0, yaw])
+        drone.set_propellels_rpm([10000, 10000, 10000, 10000])  # just decoration
         drone.set_dofs_velocity(velocity=target_velocity)
 
         dataset.add_frame({
@@ -88,13 +76,45 @@ while True:
             "observation.images.camera_bottom": bottom_frame_np,
             "observation.state":                obs_state,
             "action":                           action,
+            "task":                             "fly to helipad avoiding obstacles",
         })
-
+        
         scene.step()
-        time.sleep(0.03)
-    except KeyboardInterrupt:
-        dataset.save_episode()
-        print("Autoflight stopped by user.")
-        break
 
-scene.stop_recording()
+        if check_contact(helipad_dx, helipad_dy, helipad_dz):
+            print("Helipad reached!")
+            dataset.save_episode()
+            #scene.stop_recording()
+            scene.reset()
+            drone_pos_y = random.uniform(-5, 5)
+            drone.set_pos((0, drone_pos_y, 1))
+            front_camera_mount.set_pos((0, drone_pos_y, 1))
+            drone.set_quat((1, 0, 0, 0))
+            front_camera_mount.set_quat((0.5, 0.5, -0.5, -0.5))
+            break
+        #time.sleep(0.03)
+
+if INFERENCE:
+    policy = PolicyInference(policy_name="Grigorij/drone_flight_policy", task="fly to helipad avoiding obstacles")
+    scene.sim.rigid_solver.add_weld_constraint(
+        drone.links[0].idx,
+        front_camera_mount.links[0].idx
+    )
+while INFERENCE:
+    front_frame_np = camera_front.read().rgb.cpu().numpy()
+    bottom_frame_np = camera_bottom.read().rgb.cpu().numpy()
+    obs_state, r_obstacle_d, l_obstacle_d = get_sensor_data()
+    helipad_dx, helipad_dy, helipad_dz, yaw_diff, f_obstacle_d = obs_state
+
+    
+    move_x, move_y, move_z, yaw = policy.calculate_drone_actions(obs_state, front_frame_np, bottom_frame_np)
+    print(f"Action: move_x={action[0]:.2f}, move_y={action[1]:.2f}, move_z={action[2]:.2f}, yaw={action[3]:.2f}")
+    target_velocity = np.array([move_x * 5, move_y * 5, move_z * 5, 0, 0, yaw])
+    drone.set_propellels_rpm([10000, 10000, 10000, 10000])  # just decoration
+    drone.set_dofs_velocity(velocity=target_velocity)
+
+    #time.sleep(0.03)
+
+dataset.finalize()
+dataset.push_to_hub()
+

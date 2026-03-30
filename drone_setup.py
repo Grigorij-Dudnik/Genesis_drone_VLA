@@ -11,12 +11,12 @@ drone = scene.add_entity(
 
 drone_lidar = scene.add_sensor(
     gs.sensors.Lidar(
-        pattern=gs.sensors.SphericalPattern(angles=([-5.0, 0.0, 5.0, 45.0, -45.0], [0.0])),
+        pattern=gs.sensors.SphericalPattern(angles=([-2.5, 0.0, 2.5, 45.0, -45.0], [0.0])),
         entity_idx=drone.idx,
         pos_offset=(0.0, 0.0, 0.05),
         min_range=0.3,
         max_range=5.0,
-        draw_debug=True,
+        #draw_debug=True,
     )
 )
 
