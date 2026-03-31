@@ -57,8 +57,10 @@ for _ in range(nr_episodes):
         drone.links[0].idx,
         front_camera_mount.links[0].idx
     )
+    if INFERENCE:
+        break
 
-    while not INFERENCE:
+    while True:
         front_frame_np = camera_front.read().rgb.cpu().numpy()
         bottom_frame_np = camera_bottom.read().rgb.cpu().numpy()
         obs_state, r_obstacle_d, l_obstacle_d = get_sensor_data()
@@ -95,25 +97,23 @@ for _ in range(nr_episodes):
         #time.sleep(0.03)
 
 if INFERENCE:
-    policy = PolicyInference(policy_name="Grigorij/drone_flight_policy", task="fly to helipad avoiding obstacles")
-    scene.sim.rigid_solver.add_weld_constraint(
-        drone.links[0].idx,
-        front_camera_mount.links[0].idx
-    )
-while INFERENCE:
-    front_frame_np = camera_front.read().rgb.cpu().numpy()
-    bottom_frame_np = camera_bottom.read().rgb.cpu().numpy()
-    obs_state, r_obstacle_d, l_obstacle_d = get_sensor_data()
-    helipad_dx, helipad_dy, helipad_dz, yaw_diff, f_obstacle_d = obs_state
+    policy = PolicyInference(policy_name="Grigorij/smolvla_drone_flight", dataset_name="Grigorij/drone_flight", task="fly to helipad avoiding obstacles")
+    while True:
+        front_frame_np = camera_front.read().rgb.cpu().numpy()
+        bottom_frame_np = camera_bottom.read().rgb.cpu().numpy()
+        obs_state, r_obstacle_d, l_obstacle_d = get_sensor_data()
+        helipad_dx, helipad_dy, helipad_dz, yaw_diff, f_obstacle_d = obs_state
 
-    
-    move_x, move_y, move_z, yaw = policy.calculate_drone_actions(obs_state, front_frame_np, bottom_frame_np)
-    print(f"Action: move_x={action[0]:.2f}, move_y={action[1]:.2f}, move_z={action[2]:.2f}, yaw={action[3]:.2f}")
-    target_velocity = np.array([move_x * 5, move_y * 5, move_z * 5, 0, 0, yaw])
-    drone.set_propellels_rpm([10000, 10000, 10000, 10000])  # just decoration
-    drone.set_dofs_velocity(velocity=target_velocity)
+        
+        action = policy.calculate_drone_actions(obs_state, front_frame_np, bottom_frame_np)
+        move_x, move_y, move_z, yaw = action[0].tolist()
+        print(f"Action: move_x={move_x:.2f}, move_y={move_y:.2f}, move_z={move_z:.2f}, yaw={yaw:.2f}")
+        target_velocity = np.array([move_x * 5, move_y * 5, move_z * 5, 0, 0, yaw])
+        drone.set_propellels_rpm([10000, 10000, 10000, 10000])  # just decoration
+        drone.set_dofs_velocity(velocity=target_velocity)
+        scene.step()
 
-    #time.sleep(0.03)
+        #time.sleep(0.03)
 
 dataset.finalize()
 dataset.push_to_hub()
