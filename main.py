@@ -15,14 +15,14 @@ INFERENCE = True
 
 scene.viewer.follow_entity(drone)
 
-# timestamp = time.strftime("%Y%m%d-%H%M%S")
-# scene.start_recording(
-#     data_func=lambda: camera_front.read().rgb,
-#     rec_options=gs.recorders.VideoFile(
-#         filename=os.path.expanduser(f'~/Gregs_tech/Drone_sim/drone_flight_{timestamp}.mp4'),
-#         hz=50,
-#     )
-# )
+timestamp = time.strftime("%Y%m%d-%H%M%S")
+scene.start_recording(
+    data_func=lambda: camera_front.read().rgb,
+    rec_options=gs.recorders.VideoFile(
+        filename=os.path.expanduser(f'~/Gregs_tech/Drone_sim/drone_flight_{timestamp}.mp4'),
+        hz=50,
+    )
+)
 scene.build()
 
 
@@ -50,15 +50,17 @@ def check_contact(helipad_dx, helipad_dy, helipad_dz):
         return True
     return False
 
+scene.sim.rigid_solver.add_weld_constraint(
+    drone.links[0].idx,
+    front_camera_mount.links[0].idx
+)
+
 nr_episodes = 50
 for _ in range(nr_episodes):
     
-    scene.sim.rigid_solver.add_weld_constraint(
-        drone.links[0].idx,
-        front_camera_mount.links[0].idx
-    )
     if INFERENCE:
         break
+    
 
     while True:
         front_frame_np = camera_front.read().rgb.cpu().numpy()
@@ -86,7 +88,6 @@ for _ in range(nr_episodes):
         if check_contact(helipad_dx, helipad_dy, helipad_dz):
             print("Helipad reached!")
             dataset.save_episode()
-            #scene.stop_recording()
             scene.reset()
             drone_pos_y = random.uniform(-5, 5)
             drone.set_pos((0, drone_pos_y, 1))
@@ -97,7 +98,7 @@ for _ in range(nr_episodes):
         #time.sleep(0.03)
 
 if INFERENCE:
-    policy = PolicyInference(policy_name="Grigorij/smolvla_drone_flight", dataset_name="Grigorij/drone_flight", task="fly to helipad avoiding obstacles")
+    policy = PolicyInference(policy_name="Grigorij/xvla_drone_flight", dataset_name="Grigorij/drone_flight", task="fly to helipad avoiding obstacles")
     while True:
         front_frame_np = camera_front.read().rgb.cpu().numpy()
         bottom_frame_np = camera_bottom.read().rgb.cpu().numpy()

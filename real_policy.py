@@ -12,6 +12,11 @@ class PolicyInference:
         self.policy_name = policy_name
         #self.policy = PreTrainedPolicy.from_pretrained(policy_name).to(device).eval()
         self.policy_cfg = PreTrainedConfig.from_pretrained(policy_name)
+        
+        # xvla only
+        self.policy_cfg.tokenizer_max_length = 50
+        self.policy_cfg.num_image_views = 2
+
         dataset_meta = LeRobotDatasetMetadata(dataset_name)
         policy_class = get_policy_class(self.policy_cfg.type)
         self.policy = policy_class.from_pretrained(policy_name, config=self.policy_cfg).to("cuda").eval()
@@ -28,8 +33,8 @@ class PolicyInference:
 
     def calculate_drone_actions(self, sensor_data, front_frame_np, bottom_frame_np):
         observation_frame = {
-            "observation.images.camera1": front_frame_np,
-            "observation.images.camera2": bottom_frame_np,
+            "observation.images.image": front_frame_np,
+            "observation.images.image2": bottom_frame_np,
             "observation.state": sensor_data,
         }
         action = predict_action(
