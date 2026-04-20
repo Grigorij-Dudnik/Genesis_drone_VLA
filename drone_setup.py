@@ -3,11 +3,12 @@ from buildings_scene import scene
 import random
 
 
-drone_y_pos = random.uniform(-5, 5)
+drone_y_pos = random.uniform(-4, 4)
+drone_x_pos = random.uniform(5, 7)
 drone = scene.add_entity(
     morph=gs.morphs.Drone(
         file="urdf/drones/cf2x.urdf",
-        pos=(0.0, drone_y_pos, 1),
+        pos=(drone_x_pos, drone_y_pos, 1),
         euler=(0, 0, 0)
     ),
 )
@@ -35,7 +36,7 @@ camera_bottom = scene.add_sensor(
 front_camera_mount = scene.add_entity(
     morph=gs.morphs.Box(
         size=(0.01, 0.01, 0.01),
-        pos=(0.0, drone_y_pos, 1),
+        pos=(drone_x_pos, drone_y_pos, 1),
         euler=(90, 0, -90),
     ),
 )

@@ -2,7 +2,7 @@ from lerobot.datasets.lerobot_dataset import LeRobotDataset
 import os
 import shutil
 
-dataset_repo = "Grigorij/drone_flight"
+dataset_repo = "Grigorij/drone_flight_no_buildings"
 root = "dataset/"
 # remove root directory if it already exists
 if os.path.exists(root):
@@ -19,15 +19,20 @@ dataset_features = {
         "shape": (480, 640, 3),
         "names": ["height", "width", "channels"],
     },
+    # "observation.state": {
+    #     "dtype": "float32",
+    #     "shape": (5,),               
+    #     "names": ["dx","dy","dz","dyaw","d_obst_f"],
+    # },
     "observation.state": {
         "dtype": "float32",
-        "shape": (5,),               
-        "names": ["dx","dy","dz","dyaw","d_obst_f"],
-    },
+        "shape": (1,),               
+        "names": ["dummy"],
+    },   
     "action": {
         "dtype": "float32",
-        "shape": (4,),               
-        "names": ["vx", "vy", "vz", "yaw"],
+        "shape": (3,),               
+        "names": ["vx", "vz", "yaw"],
     },
 }
 

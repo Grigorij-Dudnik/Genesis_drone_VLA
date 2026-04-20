@@ -2,9 +2,8 @@ from lerobot.utils.control_utils import predict_action
 from lerobot.policies.factory import make_pre_post_processors, get_policy_class
 from lerobot.configs.policies import PreTrainedConfig
 from lerobot.utils.device_utils import get_safe_torch_device
-from lerobot.policies.pretrained import PreTrainedPolicy
-from lerobot.policies.factory import make_policy
-from lerobot.datasets.dataset_metadata import LeRobotDatasetMetadata
+import torch
+import numpy as np
 
 
 class PolicyInference:
@@ -17,14 +16,9 @@ class PolicyInference:
         self.policy_cfg.tokenizer_max_length = 50
         self.policy_cfg.num_image_views = 2
 
-        dataset_meta = LeRobotDatasetMetadata(dataset_name)
         policy_class = get_policy_class(self.policy_cfg.type)
+        #torch.set_default_device("cpu") # pi05 lerobot 0.5.1 bug walkaround
         self.policy = policy_class.from_pretrained(policy_name, config=self.policy_cfg).to("cuda").eval()
-        # rename_map = {
-        #     "observation.images.camera_front": "observation.images.camera1",
-        #     "observation.images.camera_bottom": "observation.images.camera2",
-        # }
-        # self.policy = make_policy(self.policy_cfg, dataset_meta, rename_map=rename_map)
         self.task = task
         self.preprocessor, self.postprocessor = make_pre_post_processors(
                 policy_cfg=self.policy_cfg,
@@ -32,11 +26,26 @@ class PolicyInference:
 
 
     def calculate_drone_actions(self, sensor_data, front_frame_np, bottom_frame_np):
-        observation_frame = {
-            "observation.images.image": front_frame_np,
-            "observation.images.image2": bottom_frame_np,
+        # check if policy name after "/" starts with "smolvla"
+        if self.policy_name.split("/")[-1].startswith("smolvla"):
+            # Use the smolvla policy
+            observation_frame = {
+            "observation.images.camera1": front_frame_np,
+            "observation.images.camera2": bottom_frame_np,
             "observation.state": sensor_data,
         }
+        elif self.policy_name.split("/")[-1].startswith("xvla"):
+            observation_frame = {
+                "observation.images.image": front_frame_np,
+                "observation.images.image2": bottom_frame_np,
+                "observation.state": sensor_data,
+            }
+        else:
+            observation_frame = {
+                "observation.images.camera_front": front_frame_np,
+                "observation.images.camera_bottom": bottom_frame_np,
+                "observation.state": sensor_data,
+            }
         action = predict_action(
                 observation=observation_frame,
                 policy=self.policy,
