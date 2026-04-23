@@ -46,6 +46,12 @@ class PolicyInference:
                 "observation.images.camera_bottom": bottom_frame_np,
                 "observation.state": sensor_data,
             }
+        # save frame for debug as png
+        # from PIL import Image
+        # Image.fromarray(front_frame_np).save("front_frame.png")
+        # Image.fromarray(bottom_frame_np).save("bottom_frame.png")
+
+
         action = predict_action(
                 observation=observation_frame,
                 policy=self.policy,

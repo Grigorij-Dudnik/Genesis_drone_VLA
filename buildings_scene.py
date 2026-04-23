@@ -67,9 +67,9 @@ scene.add_entity(
 )
 _H = 0.403 
 for morph in [
-    gs.morphs.Box(size=(0.07, 0.34, 0.004), pos=(11.90, 0, _H), fixed=True),  # left bar
-    gs.morphs.Box(size=(0.07, 0.34, 0.004), pos=(12.10, 0, _H), fixed=True),  # right bar
-    gs.morphs.Box(size=(0.27, 0.07, 0.004), pos=(12.00, 0, _H), fixed=True),  # crossbar
+    gs.morphs.Box(size=(0.07, 0.34, 0.01), pos=(11.90, 0, _H), fixed=True),  # left bar
+    gs.morphs.Box(size=(0.07, 0.34, 0.01), pos=(12.10, 0, _H), fixed=True),  # right bar
+    gs.morphs.Box(size=(0.27, 0.07, 0.01), pos=(12.00, 0, _H), fixed=True),  # crossbar
 ]:
     scene.add_entity(morph, surface=gs.surfaces.Rough(color=(1.0, 1.0, 1.0)))
 

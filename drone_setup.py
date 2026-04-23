@@ -37,7 +37,7 @@ front_camera_mount = scene.add_entity(
     morph=gs.morphs.Box(
         size=(0.01, 0.01, 0.01),
         pos=(drone_x_pos, drone_y_pos, 1),
-        euler=(90, 0, -90),
+        euler=(60, 0, -90),
     ),
 )
 

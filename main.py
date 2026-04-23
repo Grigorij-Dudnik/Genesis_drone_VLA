@@ -23,7 +23,7 @@ def body_to_world_vel(move_x, move_y, move_z):
 
 INFERENCE = True
 
-scene.viewer.follow_entity(drone)
+#scene.viewer.follow_entity(drone)
 
 # timestamp = time.strftime("%Y%m%d-%H%M%S")
 # scene.start_recording(
@@ -56,7 +56,7 @@ def get_sensor_data(helipad_pos=(12, 0, 0.4)):
 
 
 def check_contact(helipad_dx, helipad_dy, helipad_dz):
-    if abs(helipad_dx) < 0.5 and abs(helipad_dy) < 0.5 and abs(helipad_dz) < 0.02:
+    if abs(helipad_dx) < 0.3 and abs(helipad_dy) < 0.3 and abs(helipad_dz) < 0.02:
         return True
     return False
 
@@ -65,7 +65,7 @@ scene.sim.rigid_solver.add_weld_constraint(
     front_camera_mount.links[0].idx
 )
 
-nr_episodes = 50
+nr_episodes = 2
 for _ in range(nr_episodes):
     if INFERENCE:
         break
@@ -78,8 +78,7 @@ for _ in range(nr_episodes):
 
         action = autoflight_policy(obs_state, r_obstacle_d, l_obstacle_d)
         move_x, move_z, yaw = action
-        print(f"Action: move_x={action[0]:.2f}, move_z={action[1]:.2f}, yaw={action[2]:.2f}")
-        wv = body_to_world_vel(move_x * 5, 0, move_z * 2.5)
+        wv = body_to_world_vel(move_x * 5, 0, move_z)
         target_velocity = np.array([wv[0], wv[1], wv[2], 0, 0, yaw])
         drone.set_propellels_rpm([10000, 10000, 10000, 10000])  # just decoration
         drone.set_dofs_velocity(velocity=target_velocity)
@@ -87,9 +86,9 @@ for _ in range(nr_episodes):
         dataset.add_frame({
             "observation.images.camera_front":  front_frame_np,
             "observation.images.camera_bottom": bottom_frame_np,
-            "observation.state":                np.array([0], dtype=np.float32),  
+            "observation.state":                np.array([helipad_dz], dtype=np.float32),  
             "action":                           action,
-            "task":                             "fly to helipad",
+            "task":                             "fly to helipad and land on it",
         })
         
         scene.step()
@@ -104,6 +103,7 @@ for _ in range(nr_episodes):
             front_camera_mount.set_pos((drone_x_pos, drone_y_pos, 1))
             drone.set_quat((1, 0, 0, 0))
             front_camera_mount.set_quat((0.5, 0.5, -0.5, -0.5))
+            #front_camera_mount.set_quat((0.612, 0.354, -0.354, -0.612))
             scene.sim.rigid_solver.add_weld_constraint(
                 drone.links[0].idx,
                 front_camera_mount.links[0].idx
@@ -111,29 +111,37 @@ for _ in range(nr_episodes):
             break
         #time.sleep(0.03)
 
+if not INFERENCE:
+    dataset.finalize()
+    dataset.push_to_hub()
+
 if INFERENCE:
-    policy = PolicyInference(policy_name="Grigorij/smolvla_drone_flight_no_buildings2", dataset_name="Grigorij/drone_flight_no_buildings", task="fly to helipad")
+    policy = PolicyInference(policy_name="Grigorij/xvla_drone_flight_no_buildings6", dataset_name="Grigorij/drone_flight_no_buildings2", task="fly to helipad and land on it")
     while True:
         front_frame_np = camera_front.read().rgb.cpu().numpy()
         bottom_frame_np = camera_bottom.read().rgb.cpu().numpy()
         obs_state, r_obstacle_d, l_obstacle_d = get_sensor_data()
         helipad_dx, helipad_dy, helipad_dz, yaw_diff, f_obstacle_d = obs_state
 
-        action = policy.calculate_drone_actions(np.array([0], dtype=np.float32), front_frame_np, bottom_frame_np)
+        action = policy.calculate_drone_actions(np.array([helipad_dz], dtype=np.float32), front_frame_np, bottom_frame_np)
         move_x, move_z, yaw = action[0].tolist()
         yaw = np.clip(yaw, -1, 1)
+        move_z = np.clip(move_z, -1, 1)
         # restrict vertical move if is far from helipad
-        if abs(helipad_dx) > 1.5:
+        if abs(helipad_dx) > 0.5:
             move_z = 0
+        move_x = np.clip(move_x, 0.15, 1)
         print(f"Action: move_x={move_x:.2f}, move_z={move_z:.2f}, yaw={yaw:.2f}")
-        wv = body_to_world_vel(move_x * 5, 0, move_z * 2.5)
+        wv = body_to_world_vel(move_x * 5, 0, move_z)
         target_velocity = np.array([wv[0], wv[1], wv[2], 0, 0, yaw])
         drone.set_propellels_rpm([10000, 10000, 10000, 10000])  # just decoration
         drone.set_dofs_velocity(velocity=target_velocity)
         scene.step()
 
-        #time.sleep(0.03)
+        # if check_contact(helipad_dx, helipad_dy, helipad_dz):
+        #     print("Helipad reached!")          
+        #     break
+    
+    scene.viewer.stop()
 
-dataset.finalize()
-dataset.push_to_hub()
 
